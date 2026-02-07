@@ -6,7 +6,7 @@ An Elixir Nx backend that binds the [Eigen C++ library](https://eigen.tuxfamily.
 
 - **Complete Nx.Backend implementation** - All required callbacks implemented
 - **Efficient linear algebra** - Uses Eigen's optimized matrix operations
-- **FFT support** - (temporarily disabled)
+- **FFT support** - Pluggable interface; FFTW3 by default, bring-your-own `.so` for cross-compilation
 - **All Nx types** - Support for u8-u64, s8-s64, f32/f64, c64/c128
 - **Embedded-friendly** - Bitwise operations, integer math, and efficient memory usage
 - **No template metaprogramming nonsense** - Clean, straightforward C++ implementations
@@ -16,6 +16,7 @@ An Elixir Nx backend that binds the [Eigen C++ library](https://eigen.tuxfamily.
 ### Required
 
 - **Eigen** (≥3.4.0) - C++ template library for linear algebra
+- **FFTW3** - For FFT support (optional; see [FFT Library Choice](#fft-library-choice) below)
 - **Elixir** (≥1.14)
 - **Erlang/OTP** (≥25)
 
@@ -33,13 +34,112 @@ mix deps.get
 mix compile
 ```
 
+#### FFT Library Choice
+
+FFT support (`Nx.fft/2`, `Nx.ifft/2`) uses a **pluggable C interface** defined in
+[`c_src/nx_eigen_fft.h`](c_src/nx_eigen_fft.h).  The interface exposes two functions:
+
+```c
+int nx_eigen_fft_forward(const double *in, double *out, int n);
+int nx_eigen_fft_inverse(const double *in, double *out, int n);
+```
+
+Buffers are interleaved complex doubles (`[re0, im0, re1, im1, ...]`, 2×n
+doubles total).  Both transforms are **unnormalised**; the NIF divides by n
+for the inverse.  Return 0 on success.
+
+##### Default: FFTW3
+
+By default, NxEigen compiles and links the FFTW3 implementation
+(`c_src/nx_eigen_fft_fftw.cpp`).  Install FFTW3 on your system:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install libfftw3-dev
+
+# macOS (Homebrew)
+brew install fftw
+
+# Fedora/RHEL
+sudo dnf install fftw-devel
+```
+
+##### Configuration
+
+Two environment variables control FFT at build time:
+
+| Variable             | Values / meaning                                                     |
+|----------------------|----------------------------------------------------------------------|
+| `NX_EIGEN_FFT_LIB`  | `fftw` **(default)** · `none` (stubs that return errors)             |
+| `NX_EIGEN_FFT_SO`   | Absolute path to a custom `.so` – **overrides** `NX_EIGEN_FFT_LIB`  |
+
+Examples:
+
+```bash
+# Disable FFT entirely
+export NX_EIGEN_FFT_LIB=none
+mix compile
+
+# Use a custom FFT shared library
+export NX_EIGEN_FFT_SO=/path/to/libmy_fft.so
+mix compile
+```
+
+When using the CMake build path, the same variables are forwarded:
+
+```bash
+# Disable FFT via CMake
+make USE_CMAKE=1 CMAKE_ARGS="-DNX_EIGEN_FFT_LIB=none"
+
+# Custom .so via CMake
+make USE_CMAKE=1 CMAKE_ARGS="-DNX_EIGEN_FFT_SO=/path/to/libmy_fft.so"
+```
+
+##### Building a custom FFT `.so`
+
+Implement the two functions declared in `c_src/nx_eigen_fft.h` and compile
+them into a shared library for your target platform.  Minimal example:
+
+```c
+// my_fft.c
+#include "nx_eigen_fft.h"
+#include <my_platform_fft.h>  // your platform's FFT API
+
+int nx_eigen_fft_forward(const double *in, double *out, int n) {
+    // ... call your platform FFT ...
+    return 0;
+}
+
+int nx_eigen_fft_inverse(const double *in, double *out, int n) {
+    // ... call your platform IFFT ...
+    return 0;
+}
+```
+
+```bash
+# Cross-compile for the target
+aarch64-linux-gnu-gcc -shared -fPIC -o libmy_fft.so my_fft.c -lmy_platform_fft
+```
+
+Then build NxEigen against it:
+
+```bash
+export NX_EIGEN_FFT_SO=/path/to/libmy_fft.so
+export CROSSCOMPILE=aarch64-linux-gnu-
+mix compile
+```
+
+At runtime the NIF finds the custom `.so` via `$ORIGIN` rpath, so either
+place it next to `priv/libnx_eigen.so` or ensure it's in a standard
+library search path on the target.
+
 #### Cross-compilation
 
 This project builds a NIF (`priv/libnx_eigen.so`) via `make`. For cross-compilation you typically want to:
 
 - **Set a toolchain**: `CROSSCOMPILE` (prefix) or `CXX` (full path)
 - **Set the target OS** (so we don't add macOS-only linker flags): `TARGET_OS=Linux|Darwin`
-- **FFT note**: FFT (`fft/ifft`) is currently disabled in the native library build.
+- **FFT**: disable with `NX_EIGEN_FFT_LIB=none`, or provide a custom `.so` with `NX_EIGEN_FFT_SO=/path/to/lib.so`
 - **(If needed)** override `ERL_INCLUDE_DIR` to a matching Erlang/OTP include directory
 
 Example (toolchain-prefix style):
@@ -48,6 +148,7 @@ Example (toolchain-prefix style):
 export CROSSCOMPILE=aarch64-linux-gnu-
 export TARGET_OS=Linux
 export EIGEN_DIR=/path/to/eigen
+export NX_EIGEN_FFT_LIB=none  # or: NX_EIGEN_FFT_SO=/path/to/libmy_fft.so
 
 mix deps.get
 mix compile
@@ -102,7 +203,7 @@ make SKIP_DOWNLOADS=1 USE_CMAKE=1 \
   CMAKE_TOOLCHAIN_FILE=cmake/toolchains/aarch64-linux-gnu-sysroot.cmake \
   CMAKE_BUILD_DIR=$PWD/cmake-build-aarch64 \
   CMAKE_BUILD_TYPE=Release \
-  CMAKE_ARGS="-DCMAKE_SYSROOT=$SYSROOT" \
+  CMAKE_ARGS="-DCMAKE_SYSROOT=$SYSROOT -DNX_EIGEN_FFT_LIB=none" \  # or -DNX_EIGEN_FFT_SO=/path/to/libmy_fft.so
   ERL_INCLUDE_DIR="$ERL_INCLUDE_DIR"
 ```
 
@@ -128,7 +229,9 @@ def project do
     make_env: %{
       "EIGEN_DIR" => "/path/to/eigen",
       "CROSSCOMPILE" => "aarch64-linux-gnu-",
-      "TARGET_OS" => "Linux"
+      "TARGET_OS" => "Linux",
+      "NX_EIGEN_FFT_LIB" => "none",  # or "fftw", or omit and set NX_EIGEN_FFT_SO instead
+      # "NX_EIGEN_FFT_SO" => "/path/to/libmy_fft.so"  # custom FFT for the target
     }
   ]
 end
@@ -169,7 +272,8 @@ a = NxEigen.tensor([[1.0, 2.0], [3.0, 4.0]], type: {:f, 32})
 b = Nx.transpose(a)
 result = Nx.dot(a, b)
 
-# FFT operations are currently disabled in the native library build.
+# FFT (requires FFTW3; see FFT Library Choice in README)
+fft_result = Nx.fft(NxEigen.tensor([1.0, 0.0, 0.0, 0.0]), length: 4)
 ```
 
 ## Implementation Details

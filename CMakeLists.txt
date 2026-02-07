@@ -42,7 +42,53 @@ target_include_directories(nx_eigen PRIVATE
   "${FINE_INCLUDE}"
 )
 
-target_compile_definitions(nx_eigen PRIVATE NX_EIGEN_DISABLE_FFTW)
+# FFT library choice.
+#
+# The NIF calls a pluggable C interface (c_src/nx_eigen_fft.h).
+# NX_EIGEN_FFT_LIB selects the built-in implementation:
+#   "fftw" (default) - compile nx_eigen_fft_fftw.cpp, link FFTW3
+#   "none"           - compile nx_eigen_fft_none.cpp  (stubs that return errors)
+#
+# NX_EIGEN_FFT_SO overrides NX_EIGEN_FFT_LIB: set it to the absolute path of a
+# shared library that exports nx_eigen_fft_forward / nx_eigen_fft_inverse.
+set(NX_EIGEN_FFT_LIB "fftw" CACHE STRING "FFT implementation: fftw or none")
+set(NX_EIGEN_FFT_SO  ""     CACHE FILEPATH "Path to custom FFT .so (overrides NX_EIGEN_FFT_LIB)")
+
+target_include_directories(nx_eigen PRIVATE "${CMAKE_SOURCE_DIR}/c_src")
+
+if(NOT NX_EIGEN_FFT_SO STREQUAL "")
+  # ── Custom shared library ──────────────────────────────────────────
+  target_link_libraries(nx_eigen PRIVATE "${NX_EIGEN_FFT_SO}")
+  set_target_properties(nx_eigen PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
+  message(STATUS "FFT support: custom .so (${NX_EIGEN_FFT_SO})")
+
+elseif(NX_EIGEN_FFT_LIB STREQUAL "fftw")
+  # ── Default FFTW3 implementation ───────────────────────────────────
+  target_sources(nx_eigen PRIVATE c_src/nx_eigen_fft_fftw.cpp)
+
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(FFTW3 QUIET fftw3)
+  endif()
+
+  if(FFTW3_FOUND)
+    target_include_directories(nx_eigen PRIVATE ${FFTW3_INCLUDE_DIRS})
+    target_link_libraries(nx_eigen PRIVATE ${FFTW3_LIBRARIES})
+    target_link_directories(nx_eigen PRIVATE ${FFTW3_LIBRARY_DIRS})
+    message(STATUS "FFT support: FFTW3 (via pkg-config)")
+  else()
+    target_link_libraries(nx_eigen PRIVATE fftw3)
+    message(STATUS "FFT support: FFTW3 (direct link)")
+  endif()
+
+elseif(NX_EIGEN_FFT_LIB STREQUAL "none")
+  # ── Stubs (FFT disabled) ───────────────────────────────────────────
+  target_sources(nx_eigen PRIVATE c_src/nx_eigen_fft_none.cpp)
+  message(STATUS "FFT support: disabled (NX_EIGEN_FFT_LIB=none)")
+
+else()
+  message(FATAL_ERROR "Unsupported NX_EIGEN_FFT_LIB value: ${NX_EIGEN_FFT_LIB}. Use \"fftw\", \"none\", or set NX_EIGEN_FFT_SO.")
+endif()
 
 # NIFs on macOS typically use dynamic lookup instead of linking to libErlang.
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")

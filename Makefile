@@ -17,9 +17,46 @@ EIGEN_DIR ?= $(CURDIR)/eigen-$(EIGEN_VERSION)
 EIGEN_INCLUDE = $(EIGEN_DIR)
 FINE_INCLUDE = $(CURDIR)/deps/fine/c_include
 
-# FFTW is intentionally disabled/removed for now.
-CFLAGS = -fPIC -I$(ERL_INCLUDE_DIR) -I$(EIGEN_INCLUDE) -I$(FINE_INCLUDE) -O3 -std=c++17
+# FFT library choice
+# The NIF calls a pluggable C interface (see c_src/nx_eigen_fft.h).
+#
+# NX_EIGEN_FFT_LIB selects which implementation is compiled in:
+#   fftw  - Use FFTW3 (default for native builds)
+#   none  - Disable FFT support (stubs that return errors)
+#
+# NX_EIGEN_FFT_SO overrides NX_EIGEN_FFT_LIB entirely: set it to the
+# path of a shared library that exports nx_eigen_fft_forward/inverse
+# (see c_src/nx_eigen_fft.h for the contract).  Useful when cross-
+# compiling with a custom FFT backend.
+NX_EIGEN_FFT_LIB ?= fftw
+NX_EIGEN_FFT_SO  ?=
+
+CFLAGS = -fPIC -I$(ERL_INCLUDE_DIR) -I$(EIGEN_INCLUDE) -I$(FINE_INCLUDE) -Ic_src -O3 -std=c++17
 LDFLAGS = -shared
+
+# Resolve FFT sources and link flags
+FFT_SRCS =
+FFT_LDFLAGS =
+FFT_CFLAGS =
+
+ifneq ($(NX_EIGEN_FFT_SO),)
+  # Custom shared library – link directly against it
+  FFT_LDFLAGS = $(NX_EIGEN_FFT_SO) -Wl,-rpath,'$$ORIGIN'
+else ifeq ($(NX_EIGEN_FFT_LIB),fftw)
+  FFT_SRCS = c_src/nx_eigen_fft_fftw.cpp
+  # Try pkg-config first (handles Homebrew installations properly)
+  PKG_CONFIG_FFTW3 := $(shell pkg-config --exists fftw3 2>/dev/null && echo yes)
+  ifeq ($(PKG_CONFIG_FFTW3),yes)
+    FFT_CFLAGS = $(shell pkg-config --cflags fftw3 fftw3f)
+    FFT_LDFLAGS = $(shell pkg-config --libs fftw3 fftw3f)
+  else
+    FFT_LDFLAGS = -lfftw3 -lfftw3f
+  endif
+else ifeq ($(NX_EIGEN_FFT_LIB),none)
+  FFT_SRCS = c_src/nx_eigen_fft_none.cpp
+else
+  $(error Unsupported NX_EIGEN_FFT_LIB value: $(NX_EIGEN_FFT_LIB). Use "fftw", "none", or set NX_EIGEN_FFT_SO.)
+endif
 
 UNAME_S := $(shell uname -s)
 TARGET_OS ?= $(UNAME_S)
@@ -51,15 +88,17 @@ check-deps:
 priv:
 	@mkdir -p priv
 
-$(LIB_NAME): c_src/nx_eigen_nif.cpp | check-deps priv
+$(LIB_NAME): c_src/nx_eigen_nif.cpp c_src/nx_eigen_fft.h $(FFT_SRCS) | check-deps priv
 ifeq ($(USE_CMAKE),1)
 	$(CMAKE) -S $(CURDIR) -B $(CMAKE_BUILD_DIR) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 		$(if $(CMAKE_TOOLCHAIN_FILE),-DCMAKE_TOOLCHAIN_FILE=$(CMAKE_TOOLCHAIN_FILE),) \
 		$(CMAKE_ARGS) \
-		-DERL_INCLUDE_DIR=$(ERL_INCLUDE_DIR) -DEIGEN_DIR=$(EIGEN_DIR) -DFINE_INCLUDE=$(FINE_INCLUDE)
+		-DERL_INCLUDE_DIR=$(ERL_INCLUDE_DIR) -DEIGEN_DIR=$(EIGEN_DIR) -DFINE_INCLUDE=$(FINE_INCLUDE) \
+		-DNX_EIGEN_FFT_LIB=$(NX_EIGEN_FFT_LIB) \
+		$(if $(NX_EIGEN_FFT_SO),-DNX_EIGEN_FFT_SO=$(NX_EIGEN_FFT_SO),)
 	$(CMAKE) --build $(CMAKE_BUILD_DIR) --config $(CMAKE_BUILD_TYPE)
 else
-	$(CXX) $(CFLAGS) $(LDFLAGS) c_src/nx_eigen_nif.cpp -o $(LIB_NAME)
+	$(CXX) $(CFLAGS) $(FFT_CFLAGS) $(LDFLAGS) $(FFT_LDFLAGS) c_src/nx_eigen_nif.cpp $(FFT_SRCS) -o $(LIB_NAME)
 endif
 
 clean:

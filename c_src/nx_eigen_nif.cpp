@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "nx_eigen_fft.h"
+
 // Supported scalar types for EigenTensor
 enum class ScalarType {
   U8,
@@ -2904,15 +2906,151 @@ fine::ResourcePtr<EigenTensor> window_scatter_min_nif(
 }
 FINE_NIF(window_scatter_min_nif, 0);
 
+// ── FFT helpers (calls through pluggable nx_eigen_fft.h interface) ───────────
+
+// Compute stride / batch dimensions for operating along a single axis
+// of a multi-dimensional tensor stored in row-major (C) order.
+//
+// Given shape [d0, d1, ..., d_{n-1}] and target axis k:
+//   outer = d0 * d1 * ... * d_{k-1}          (product of dims before axis)
+//   n     = d_k                               (size of the axis)
+//   inner = d_{k+1} * ... * d_{n-1}           (product of dims after axis)
+//
+// The element at multi-index [i0, ..., i_{n-1}] is stored at flat offset:
+//   outer_idx * (n * inner) + pos * inner + inner_idx
+// where outer_idx ∈ [0, outer), pos ∈ [0, n), inner_idx ∈ [0, inner).
+
+struct AxisGeometry {
+  int64_t outer; // product of dims before the axis
+  int64_t n;     // length of the axis itself
+  int64_t inner; // product of dims after the axis
+};
+
+static AxisGeometry axis_geometry(const std::vector<int64_t> &shape,
+                                  int64_t axis) {
+  int64_t ndim = static_cast<int64_t>(shape.size());
+  if (axis < 0)
+    axis += ndim;
+  if (axis < 0 || axis >= ndim)
+    throw std::runtime_error("fft: axis out of range");
+
+  AxisGeometry g;
+  g.n = shape[axis];
+  g.outer = 1;
+  for (int64_t i = 0; i < axis; ++i)
+    g.outer *= shape[i];
+  g.inner = 1;
+  for (int64_t i = axis + 1; i < ndim; ++i)
+    g.inner *= shape[i];
+  return g;
+}
+
+enum class FftDirection { Forward, Inverse };
+
+// Run 1-D complex-to-complex FFT (forward or inverse) along one axis.
+// Template version for both float and double precision.
+template <typename T>
+static void fft_along_axis_t(const std::complex<T> *in_buf,
+                             std::complex<T> *out_buf,
+                             const AxisGeometry &geom, int64_t fft_length,
+                             FftDirection direction) {
+  // Temporary contiguous buffers for a single 1-D transform
+  std::vector<std::complex<T>> in_vec(fft_length, {T(0), T(0)});
+  std::vector<std::complex<T>> out_vec(fft_length);
+
+  int64_t copy_len = std::min(geom.n, fft_length);
+
+  for (int64_t o = 0; o < geom.outer; ++o) {
+    for (int64_t i = 0; i < geom.inner; ++i) {
+      // Gather the 1-D slice into the contiguous buffer
+      for (int64_t p = 0; p < copy_len; ++p)
+        in_vec[p] = in_buf[o * (geom.n * geom.inner) + p * geom.inner + i];
+      // Zero-pad if fft_length > axis size
+      for (int64_t p = copy_len; p < fft_length; ++p)
+        in_vec[p] = {T(0), T(0)};
+
+      int rc;
+      if constexpr (std::is_same_v<T, float>) {
+        if (direction == FftDirection::Forward)
+          rc = nx_eigen_fft_forward_f32(
+              reinterpret_cast<const float *>(in_vec.data()),
+              reinterpret_cast<float *>(out_vec.data()),
+              static_cast<int>(fft_length));
+        else
+          rc = nx_eigen_fft_inverse_f32(
+              reinterpret_cast<const float *>(in_vec.data()),
+              reinterpret_cast<float *>(out_vec.data()),
+              static_cast<int>(fft_length));
+      } else {
+        if (direction == FftDirection::Forward)
+          rc = nx_eigen_fft_forward_f64(
+              reinterpret_cast<const double *>(in_vec.data()),
+              reinterpret_cast<double *>(out_vec.data()),
+              static_cast<int>(fft_length));
+        else
+          rc = nx_eigen_fft_inverse_f64(
+              reinterpret_cast<const double *>(in_vec.data()),
+              reinterpret_cast<double *>(out_vec.data()),
+              static_cast<int>(fft_length));
+      }
+
+      if (rc != 0)
+        throw std::runtime_error(
+            "FFT operation failed (rc=" + std::to_string(rc) +
+            "). Is FFT support compiled in? "
+            "See NX_EIGEN_FFT_LIB / NX_EIGEN_FFT_SO in the README.");
+
+      // Scatter back
+      for (int64_t p = 0; p < fft_length; ++p)
+        out_buf[o * (fft_length * geom.inner) + p * geom.inner + i] =
+            out_vec[p];
+    }
+  }
+}
+
 fine::ResourcePtr<EigenTensor> fft_nif(ErlNifEnv *env,
                                        fine::ResourcePtr<EigenTensor> tensor,
                                        int64_t length, int64_t axis) {
   (void)env;
-  (void)tensor;
-  (void)length;
-  (void)axis;
-  throw std::runtime_error(
-      "FFTW support is disabled at build time (NX_EIGEN_DISABLE_FFTW)");
+  auto geom = axis_geometry(tensor->shape, axis);
+  int64_t fft_length = length;
+
+  // Build output shape (axis dimension becomes fft_length)
+  auto out_shape = tensor->shape;
+  int64_t ndim = static_cast<int64_t>(out_shape.size());
+  int64_t real_axis = axis < 0 ? axis + ndim : axis;
+  out_shape[real_axis] = fft_length;
+
+  size_t out_elems = 1;
+  for (auto d : out_shape)
+    out_elems *= d;
+
+  auto result = fine::make_resource<EigenTensor>();
+  result->shape = out_shape;
+
+  // Input is guaranteed to be complex (upcasted in Elixir)
+  // Get direct pointer to data - no copy needed
+  if (auto *c128_arr = std::get_if<FlatArray<std::complex<double>>>(&tensor->data)) {
+    std::vector<std::complex<double>> out_buf(out_elems);
+    fft_along_axis_t<double>(c128_arr->data(), out_buf.data(), geom, fft_length,
+                            FftDirection::Forward);
+    auto &res_arr = result->data.emplace<FlatArray<std::complex<double>>>();
+    res_arr.resize(out_elems);
+    std::memcpy(res_arr.data(), out_buf.data(),
+                out_elems * sizeof(std::complex<double>));
+  } else if (auto *c64_arr = std::get_if<FlatArray<std::complex<float>>>(&tensor->data)) {
+    std::vector<std::complex<float>> out_buf(out_elems);
+    fft_along_axis_t<float>(c64_arr->data(), out_buf.data(), geom, fft_length,
+                           FftDirection::Forward);
+    auto &res_arr = result->data.emplace<FlatArray<std::complex<float>>>();
+    res_arr.resize(out_elems);
+    std::memcpy(res_arr.data(), out_buf.data(),
+                out_elems * sizeof(std::complex<float>));
+  } else {
+    throw std::runtime_error("FFT input must be complex (c64 or c128)");
+  }
+
+  return result;
 }
 FINE_NIF(fft_nif, 0);
 
@@ -2920,11 +3058,52 @@ fine::ResourcePtr<EigenTensor> ifft_nif(ErlNifEnv *env,
                                         fine::ResourcePtr<EigenTensor> tensor,
                                         int64_t length, int64_t axis) {
   (void)env;
-  (void)tensor;
-  (void)length;
-  (void)axis;
-  throw std::runtime_error(
-      "FFTW support is disabled at build time (NX_EIGEN_DISABLE_FFTW)");
+  auto geom = axis_geometry(tensor->shape, axis);
+  int64_t fft_length = length;
+
+  auto out_shape = tensor->shape;
+  int64_t ndim = static_cast<int64_t>(out_shape.size());
+  int64_t real_axis = axis < 0 ? axis + ndim : axis;
+  out_shape[real_axis] = fft_length;
+
+  size_t out_elems = 1;
+  for (auto d : out_shape)
+    out_elems *= d;
+
+  auto result = fine::make_resource<EigenTensor>();
+  result->shape = out_shape;
+
+  // Input is guaranteed to be complex (upcasted in Elixir)
+  // Get direct pointer to data - no copy needed
+  if (auto *c128_arr = std::get_if<FlatArray<std::complex<double>>>(&tensor->data)) {
+    std::vector<std::complex<double>> out_buf(out_elems);
+    fft_along_axis_t<double>(c128_arr->data(), out_buf.data(), geom, fft_length,
+                            FftDirection::Inverse);
+    // The interface returns unnormalised IDFT – divide by N
+    double inv_n = 1.0 / static_cast<double>(fft_length);
+    for (size_t i = 0; i < out_elems; ++i)
+      out_buf[i] *= inv_n;
+    auto &res_arr = result->data.emplace<FlatArray<std::complex<double>>>();
+    res_arr.resize(out_elems);
+    std::memcpy(res_arr.data(), out_buf.data(),
+                out_elems * sizeof(std::complex<double>));
+  } else if (auto *c64_arr = std::get_if<FlatArray<std::complex<float>>>(&tensor->data)) {
+    std::vector<std::complex<float>> out_buf(out_elems);
+    fft_along_axis_t<float>(c64_arr->data(), out_buf.data(), geom, fft_length,
+                           FftDirection::Inverse);
+    // The interface returns unnormalised IDFT – divide by N
+    float inv_n = 1.0f / static_cast<float>(fft_length);
+    for (size_t i = 0; i < out_elems; ++i)
+      out_buf[i] *= inv_n;
+    auto &res_arr = result->data.emplace<FlatArray<std::complex<float>>>();
+    res_arr.resize(out_elems);
+    std::memcpy(res_arr.data(), out_buf.data(),
+                out_elems * sizeof(std::complex<float>));
+  } else {
+    throw std::runtime_error("IFFT input must be complex (c64 or c128)");
+  }
+
+  return result;
 }
 FINE_NIF(ifft_nif, 0);
 
