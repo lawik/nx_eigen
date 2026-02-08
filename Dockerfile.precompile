@@ -1,0 +1,50 @@
+# Dockerfile for native compilation of nx_eigen NIFs
+# This builds natively for each target platform using Docker multi-arch support
+FROM hexpm/elixir:1.18-otp-27-debian
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# Install build tools and FFTW (both double and single precision)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    ccache \
+    curl \
+    git \
+    pkg-config \
+    wget \
+    binutils \
+    libfftw3-dev \
+    libfftw3-3 \
+    libfftw3-single3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install newer CMake (Debian Bullseye has 3.18, we need 3.20+)
+RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-linux-$(uname -m).tar.gz && \
+    tar -xzf cmake-3.27.9-linux-$(uname -m).tar.gz -C /usr/local --strip-components=1 && \
+    rm cmake-3.27.9-linux-$(uname -m).tar.gz && \
+    cmake --version
+
+# Display platform information for debugging
+RUN echo "Building on ${BUILDPLATFORM} for ${TARGETPLATFORM}" && \
+    echo "Architecture: $(uname -m)" && \
+    gcc --version
+
+WORKDIR /work
+
+# Install Hex and Rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Set environment for precompilation
+ENV MIX_ENV=prod
+ENV ELIXIR_MAKE_CACHE_DIR=/work/cache
+
+# Configure ccache for optimal performance
+ENV CCACHE_DIR=/work/.ccache
+ENV CCACHE_COMPRESS=1
+ENV CCACHE_COMPRESSLEVEL=6
+ENV CCACHE_MAXSIZE=1G
+RUN mkdir -p /work/.ccache
+
+CMD ["/bin/bash"]

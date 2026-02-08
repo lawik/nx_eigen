@@ -44,13 +44,34 @@ ifneq ($(NX_EIGEN_FFT_SO),)
   FFT_LDFLAGS = $(NX_EIGEN_FFT_SO) -Wl,-rpath,'$$ORIGIN'
 else ifeq ($(NX_EIGEN_FFT_LIB),fftw)
   FFT_SRCS = c_src/nx_eigen_fft_fftw.cpp
-  # Try pkg-config first (handles Homebrew installations properly)
-  PKG_CONFIG_FFTW3 := $(shell pkg-config --exists fftw3 2>/dev/null && echo yes)
+
+  # Determine pkg-config command (handle cross-compilation)
+  PKG_CONFIG ?= pkg-config
+
+  # Try pkg-config first
+  PKG_CONFIG_FFTW3 := $(shell $(PKG_CONFIG) --exists fftw3 2>/dev/null && echo yes)
   ifeq ($(PKG_CONFIG_FFTW3),yes)
-    FFT_CFLAGS = $(shell pkg-config --cflags fftw3 fftw3f)
-    FFT_LDFLAGS = $(shell pkg-config --libs fftw3 fftw3f)
+    FFT_CFLAGS = $(shell $(PKG_CONFIG) --cflags fftw3 fftw3f)
+    FFT_LDFLAGS = $(shell $(PKG_CONFIG) --libs fftw3 fftw3f)
+    # Add rpath for runtime library discovery
+    FFTW_LIBDIR := $(shell $(PKG_CONFIG) --variable=libdir fftw3 2>/dev/null)
+    ifneq ($(FFTW_LIBDIR),)
+      FFT_LDFLAGS += -Wl,-rpath,$(FFTW_LIBDIR)
+    endif
   else
-    FFT_LDFLAGS = -lfftw3 -lfftw3f
+    # Fallback for cross-compilation with sysroot
+    ifneq ($(CROSSCOMPILE),)
+      ifdef TARGET
+        SYSROOT ?= /usr/$(TARGET)
+      else
+        SYSROOT ?= /usr/$(CROSSCOMPILE:%-=%)
+      endif
+      FFT_CFLAGS = -I$(SYSROOT)/include
+      FFT_LDFLAGS = -L$(SYSROOT)/lib -lfftw3 -lfftw3f -Wl,-rpath,$(SYSROOT)/lib
+    else
+      # Default: assume system libraries with rpath for common locations
+      FFT_LDFLAGS = -lfftw3 -lfftw3f -Wl,-rpath,/usr/lib -Wl,-rpath,/usr/local/lib
+    endif
   endif
 else ifeq ($(NX_EIGEN_FFT_LIB),none)
   FFT_SRCS = c_src/nx_eigen_fft_none.cpp
@@ -62,6 +83,9 @@ UNAME_S := $(shell uname -s)
 TARGET_OS ?= $(UNAME_S)
 ifeq ($(TARGET_OS),Darwin)
 	LDFLAGS += -undefined dynamic_lookup
+else
+	# Add common library paths for runtime linking on Linux
+	LDFLAGS += -Wl,-rpath,'$$ORIGIN' -Wl,-rpath,'$$ORIGIN/../lib'
 endif
 
 LIB_NAME = priv/libnx_eigen.so
@@ -96,13 +120,28 @@ ifeq ($(USE_CMAKE),1)
 		-DERL_INCLUDE_DIR=$(ERL_INCLUDE_DIR) -DEIGEN_DIR=$(EIGEN_DIR) -DFINE_INCLUDE=$(FINE_INCLUDE) \
 		-DNX_EIGEN_FFT_LIB=$(NX_EIGEN_FFT_LIB) \
 		$(if $(NX_EIGEN_FFT_SO),-DNX_EIGEN_FFT_SO=$(NX_EIGEN_FFT_SO),)
-	$(CMAKE) --build $(CMAKE_BUILD_DIR) --config $(CMAKE_BUILD_TYPE)
+	$(CMAKE) --build $(CMAKE_BUILD_DIR) --config $(CMAKE_BUILD_TYPE) --parallel
 else
-	$(CXX) $(CFLAGS) $(FFT_CFLAGS) $(LDFLAGS) $(FFT_LDFLAGS) c_src/nx_eigen_nif.cpp $(FFT_SRCS) -o $(LIB_NAME)
+	$(CXX) $(CFLAGS) $(FFT_CFLAGS) c_src/nx_eigen_nif.cpp $(FFT_SRCS) $(LDFLAGS) $(FFT_LDFLAGS) -o $(LIB_NAME)
 endif
 
 clean:
 	rm -rf priv $(LIB_NAME) $(CMAKE_BUILD_DIR) eigen-$(EIGEN_VERSION)*
 
-.PHONY: all clean check-deps
+# Precompilation targets
+precompile:
+	@bash scripts/precompile-docker.sh
+
+# Test precompiled binaries
+test-precompiled:
+	@bash scripts/test-precompiled.sh
+
+test-precompiled-target:
+	@if [ -z "$(TARGET)" ]; then \
+		echo "Error: TARGET not specified. Usage: make test-precompiled-target TARGET=x86_64-linux-gnu"; \
+		exit 1; \
+	fi
+	@bash scripts/test-precompiled.sh $(TARGET)
+
+.PHONY: all clean check-deps precompile test-precompiled test-precompiled-target
 
