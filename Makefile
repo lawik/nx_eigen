@@ -126,7 +126,7 @@ else
 endif
 
 clean:
-	rm -rf priv $(LIB_NAME) $(CMAKE_BUILD_DIR) eigen-$(EIGEN_VERSION)*
+	rm -rf $(LIB_NAME) $(CMAKE_BUILD_DIR) eigen-$(EIGEN_VERSION)*
 
 # Precompilation targets
 precompile:

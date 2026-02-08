@@ -26,9 +26,15 @@ defmodule NxEigen.MixProject do
         cleanup: "clean",
         cmake_lists_path: "CMakeLists.txt",
         cmake_build_type: "Release",
-        cmake_flags: ["-DNX_EIGEN_FFT_LIB=fftw"]
+        cmake_flags: ["-DNX_EIGEN_FFT_LIB=fftw"],
+        # Restrict targets to those we explicitly list for the current OS.
+        # This prevents macOS runners from attempting to build both archs in one job.
+        only_listed_targets: true,
+        compilers: %{
+          {:unix, :linux} => linux_targets_at_compile_time(),
+          {:unix, :darwin} => macos_targets()
+        }
       ],
-      cc_precompile: cc_precompile(),
 
       # Package configuration
       package: package(),
@@ -80,19 +86,6 @@ defmodule NxEigen.MixProject do
       ],
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url}
-    ]
-  end
-
-  defp cc_precompile do
-    [
-      compilers: %{
-        {:unix, :linux} => fn ->
-          linux_targets_at_compile_time()
-        end,
-        {:unix, :darwin} => fn ->
-          macos_targets()
-        end
-      }
     ]
   end
 
