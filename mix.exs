@@ -211,6 +211,16 @@ defmodule NxEigen.MixProject do
           }
         }
 
+      "arm64" <> _ ->
+        %{
+          "aarch64-apple-darwin" => {
+            "clang",
+            "clang++",
+            "<%= cc %> -arch arm64",
+            "<%= cxx %> -arch arm64"
+          }
+        }
+
       "x86_64" <> _ ->
         %{
           "x86_64-apple-darwin" => {

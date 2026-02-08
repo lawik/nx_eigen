@@ -246,7 +246,7 @@ jobs:
   # x86_64 macOS build on older runner
   macos-x86:
     name: macOS (x86_64)
-    runs-on: macos-13
+    runs-on: macos-15-intel
     env:
       MIX_ENV: prod
       ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
