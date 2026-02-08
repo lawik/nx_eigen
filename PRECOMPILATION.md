@@ -217,15 +217,15 @@ mix elixir_make.precompile
 1. ✅ Update version in `mix.exs`
 2. ✅ Commit and tag: `git tag v0.1.0 && git push origin v0.1.0`
 3. ✅ Wait for GitHub Actions to complete
-4. ✅ Generate checksum: `MIX_ENV=prod mix elixir_make.checksum --all --print`
-5. ✅ Commit checksum file: `git add checksum-nx_eigen.exs && git commit -m "Add checksums"`
+4. ✅ Generate checksum: `MIX_ENV=prod PRECOMPILE_TARGET=all mix elixir_make.checksum --all --print`
+5. ✅ Commit checksum file: `git add checksum.exs && git commit -m "Add checksums"`
 6. ✅ Publish to Hex: `mix hex.publish`
 
 ## Troubleshooting
 
 ### "Checksum file not found" error
 
-Make sure `checksum-nx_eigen.exs` is:
+Make sure `checksum.exs` is:
 - Generated after all artifacts are uploaded
 - Committed to the repository
 - Included in the `files` list in `mix.exs` package config

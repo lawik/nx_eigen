@@ -3,6 +3,9 @@ defmodule NxEigen.MixProject do
 
   @version "0.1.0"
   @source_url "https://github.com/polvalente/nx_eigen"
+  @cc_template "<%= cc %>"
+  @cxx_template "<%= cxx %>"
+  @uno_q_linux_flags "-march=armv8-a+crypto+crc -mtune=cortex-a53 -mfix-cortex-a53-835769 -mfix-cortex-a53-843419"
 
   def project do
     [
@@ -68,7 +71,8 @@ defmodule NxEigen.MixProject do
       {:nx, "~> 0.10"},
       {:elixir_make, "~> 0.8", runtime: false},
       {:cc_precompiler, "~> 0.1", runtime: false},
-      {:fine, "~> 0.1.0"}
+      {:fine, "~> 0.1.0"},
+      {:ex_doc, "~>  0.40", only: :dev, runtime: false},
     ]
   end
 
@@ -79,7 +83,7 @@ defmodule NxEigen.MixProject do
         "c_src",
         "Makefile",
         "CMakeLists.txt",
-        "checksum-nx_eigen.exs",
+        "checksum.exs",
         "mix.exs",
         "README.md",
         "LICENSE"
@@ -87,6 +91,26 @@ defmodule NxEigen.MixProject do
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url}
     ]
+  end
+
+  defp toolchain(c_compiler, cxx_compiler, cc_cmd, cxx_cmd) do
+    {c_compiler, cxx_compiler, cc_cmd, cxx_cmd}
+  end
+
+  defp gcc_toolchain(cc_cmd, cxx_cmd) do
+    toolchain("gcc", "g++", cc_cmd, cxx_cmd)
+  end
+
+  defp clang_toolchain(cc_cmd, cxx_cmd) do
+    toolchain("clang", "clang++", cc_cmd, cxx_cmd)
+  end
+
+  defp linux_target(name, cc_cmd \\ @cc_template, cxx_cmd \\ @cxx_template) do
+    %{name => gcc_toolchain(cc_cmd, cxx_cmd)}
+  end
+
+  defp macos_target(name, arch) do
+    %{name => clang_toolchain("#{@cc_template} -arch #{arch}", "#{@cxx_template} -arch #{arch}")}
   end
 
   # On Linux, determine targets at compile time (not at project definition time)
@@ -100,50 +124,30 @@ defmodule NxEigen.MixProject do
         # Build for current architecture only
         native_linux_target()
 
+      "all" ->
+        # Used for generating checksums across *all* published Linux targets
+        all_linux_targets()
+
       "aarch64-arduino-uno-q-linux-gnu" ->
         # Arduino Uno Q optimized target (ARM64 with specific flags)
         # Return ONLY this target, not the base aarch64-linux-gnu
-        %{
-          "aarch64-arduino-uno-q-linux-gnu" => {
-            "gcc",
-            "g++",
-            "<%= cc %> -march=armv8-a+crypto+crc -mtune=cortex-a53 -mfix-cortex-a53-835769 -mfix-cortex-a53-843419",
-            "<%= cxx %> -march=armv8-a+crypto+crc -mtune=cortex-a53 -mfix-cortex-a53-835769 -mfix-cortex-a53-843419"
-          }
-        }
+        linux_target(
+          "aarch64-arduino-uno-q-linux-gnu",
+          "#{@cc_template} #{@uno_q_linux_flags}",
+          "#{@cxx_template} #{@uno_q_linux_flags}"
+        )
 
       target ->
         # Build for specific target
         case target do
           "x86_64-linux-gnu" ->
-            %{
-              "x86_64-linux-gnu" => {
-                "gcc",
-                "g++",
-                "<%= cc %>",
-                "<%= cxx %>"
-              }
-            }
+            linux_target("x86_64-linux-gnu")
 
           "aarch64-linux-gnu" ->
-            %{
-              "aarch64-linux-gnu" => {
-                "gcc",
-                "g++",
-                "<%= cc %>",
-                "<%= cxx %>"
-              }
-            }
+            linux_target("aarch64-linux-gnu")
 
           "riscv64-linux-gnu" ->
-            %{
-              "riscv64-linux-gnu" => {
-                "gcc",
-                "g++",
-                "<%= cc %>",
-                "<%= cxx %>"
-              }
-            }
+            linux_target("riscv64-linux-gnu")
 
           _ ->
             IO.warn("Unknown PRECOMPILE_TARGET: #{target}, falling back to native")
@@ -152,96 +156,65 @@ defmodule NxEigen.MixProject do
     end
   end
 
+  defp all_linux_targets do
+    linux_target("x86_64-linux-gnu")
+    |> Map.merge(linux_target("aarch64-linux-gnu"))
+    |> Map.merge(
+      linux_target(
+        "aarch64-arduino-uno-q-linux-gnu",
+        "#{@cc_template} #{@uno_q_linux_flags}",
+        "#{@cxx_template} #{@uno_q_linux_flags}"
+      )
+    )
+  end
+
   # Native Linux target based on current architecture
   defp native_linux_target do
     case :erlang.system_info(:system_architecture) |> to_string() do
       "x86_64" <> _ ->
-        %{
-          "x86_64-linux-gnu" => {
-            "gcc",
-            "g++",
-            "<%= cc %>",
-            "<%= cxx %>"
-          }
-        }
+        linux_target("x86_64-linux-gnu")
 
       "aarch64" <> _ ->
-        %{
-          "aarch64-linux-gnu" => {
-            "gcc",
-            "g++",
-            "<%= cc %>",
-            "<%= cxx %>"
-          }
-        }
+        linux_target("aarch64-linux-gnu")
 
       arch ->
         # Fallback: try native compilation
         IO.warn("Unknown Linux architecture: #{arch}, attempting native compilation")
 
-        %{
-          "#{arch}-linux-gnu" => {
-            "gcc",
-            "g++",
-            "<%= cc %>",
-            "<%= cxx %>"
-          }
-        }
+        linux_target("#{arch}-linux-gnu")
     end
   end
 
   # On macOS, only build for the current architecture since FFTW is dynamically linked
   # and Homebrew provides architecture-specific binaries
   defp macos_targets do
+    case System.get_env("PRECOMPILE_TARGET") do
+      "all" ->
+        macos_target("x86_64-apple-darwin", "x86_64")
+        |> Map.merge(macos_target("aarch64-apple-darwin", "arm64"))
+
+      _ ->
+        macos_targets_native()
+    end
+  end
+
+  defp macos_targets_native do
     case :erlang.system_info(:system_architecture) |> to_string() do
       "aarch64" <> _ ->
-        %{
-          "aarch64-apple-darwin" => {
-            "clang",
-            "clang++",
-            "<%= cc %> -arch arm64",
-            "<%= cxx %> -arch arm64"
-          }
-        }
+        macos_target("aarch64-apple-darwin", "arm64")
 
       "arm64" <> _ ->
-        %{
-          "aarch64-apple-darwin" => {
-            "clang",
-            "clang++",
-            "<%= cc %> -arch arm64",
-            "<%= cxx %> -arch arm64"
-          }
-        }
+        macos_target("aarch64-apple-darwin", "arm64")
 
       "x86_64" <> _ ->
-        %{
-          "x86_64-apple-darwin" => {
-            "clang",
-            "clang++",
-            "<%= cc %> -arch x86_64",
-            "<%= cxx %> -arch x86_64"
-          }
-        }
+        macos_target("x86_64-apple-darwin", "x86_64")
 
       arch ->
         # Fallback: build both if we can't detect
         IO.warn("Unknown macOS architecture: #{arch}, building for both x86_64 and arm64")
 
-        %{
-          "x86_64-apple-darwin" => {
-            "clang",
-            "clang++",
-            "<%= cc %> -arch x86_64",
-            "<%= cxx %> -arch x86_64"
-          },
-          "aarch64-apple-darwin" => {
-            "clang",
-            "clang++",
-            "<%= cc %> -arch arm64",
-            "<%= cxx %> -arch arm64"
-          }
-        }
+        macos_target("x86_64-apple-darwin", "x86_64")
+        |> Map.merge(macos_target("aarch64-apple-darwin", "arm64"))
     end
   end
 end
