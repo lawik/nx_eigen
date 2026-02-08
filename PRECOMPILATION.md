@@ -95,9 +95,11 @@ Precompiled binaries are automatically built on native runners when you push a v
 **Linux builds**:
 - `x86_64`: Runs on `ubuntu-22.04` (native x86_64)
 - `aarch64`: Runs on `ubuntu-22.04-arm` (native ARM64)
+- `aarch64-arduino-uno-q-linux-gnu`: Runs on `ubuntu-22.04-arm` (native ARM64, with `PRECOMPILE_TARGET` set)
 
 **macOS builds**:
-- `x86_64`: Runs on `macos-13` (native Intel)
+
+- `x86_64`: Runs on `macos-15-intel` (native Intel)
 - `aarch64`: Runs on `macos-14` (native Apple Silicon)
 
 All builds use native architecture runners for maximum performance and reliability.

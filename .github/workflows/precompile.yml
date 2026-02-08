@@ -171,6 +171,88 @@ jobs:
         with:
           files: cache/*.tar.gz
 
+  linux-aarch64-arduino-uno-q:
+    name: Linux (aarch64, Arduino Uno Q)
+    runs-on: ubuntu-22.04-arm
+    env:
+      MIX_ENV: prod
+      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
+      PRECOMPILE_TARGET: aarch64-arduino-uno-q-linux-gnu
+      TARGET_ARCH: aarch64
+      TARGET_OS: arduino-uno-q-linux
+      TARGET_ABI: gnu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Erlang & Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27.2"
+          elixir-version: "1.18.1"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfftw3-dev
+
+      - name: Restore Eigen cache
+        uses: actions/cache@v4
+        with:
+          path: eigen-3.4.0
+          key: eigen-3.4.0
+
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-aarch64-arduino-uno-q-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-aarch64-arduino-uno-q-mix-
+
+      - name: Install dependencies
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+
+      - name: Precompile NIFs
+        run: |
+          mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
+          mix elixir_make.precompile
+
+      - name: Test precompiled artifact
+        env:
+          MIX_ENV: test
+        run: |
+          rm -f priv/libnx_eigen.so
+
+          TARBALL=$(ls ${ELIXIR_MAKE_CACHE_DIR}/*.tar.gz | head -n 1)
+          echo "Testing precompiled artifact: ${TARBALL}"
+          TMP_DIR=$(mktemp -d)
+          tar -xzf "${TARBALL}" -C "${TMP_DIR}"
+          SO_FILE=$(find "${TMP_DIR}" -name "libnx_eigen.so" -type f | head -n 1)
+          if [ -z "${SO_FILE}" ]; then
+            echo "ERROR: libnx_eigen.so not found in tarball"
+            exit 1
+          fi
+          mkdir -p priv
+          cp "${SO_FILE}" priv/libnx_eigen.so
+          touch priv/libnx_eigen.so
+          rm -rf "${TMP_DIR}"
+
+          mix test
+
+      - name: Upload precompiled artifacts
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
+        with:
+          files: cache/*.tar.gz
+
   macos:
     name: macOS
     runs-on: macos-14

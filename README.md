@@ -255,9 +255,12 @@ end
 **Precompiled binaries are automatically downloaded** for supported platforms:
 
 - Linux: x86_64, aarch64, riscv64 (glibc)
+- Arduino Uno Q: aarch64 (**optimized** via `aarch64-arduino-uno-q-linux-gnu`; requires `TARGET_ARCH/TARGET_OS/TARGET_ABI` env vars)
 - macOS: x86_64 (Intel), aarch64 (Apple Silicon)
 
 No need to install FFTW separately - it's statically linked into the precompiled binaries.
+
+These binaries are produced by GitHub Actions on version tags; see [PRECOMPILATION.md](PRECOMPILATION.md) for the CI matrix and release steps.
 
 ### Supported Platforms
 
