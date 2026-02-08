@@ -166,7 +166,7 @@ MIX_ENV=prod mix test
 
 You should see a log message like:
 ```
-[debug] Restore NIF for current node from: /Users/.../nx_eigen-nif-2.16-aarch64-apple-darwin-0.1.0.tar.gz
+[debug] Restore NIF for current node from: /Users/.../nx_eigen-nif-2.17-aarch64-apple-darwin-0.1.0.tar.gz
 ```
 
 ## Development Mode

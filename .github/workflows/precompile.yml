@@ -18,13 +18,9 @@ jobs:
   linux-x86_64:
     name: Linux (x86_64)
     runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        otp: ["26.2", "27.2"]
     env:
       MIX_ENV: prod
-      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache/${{ matrix.otp }}
+      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
 
     steps:
       - name: Checkout
@@ -33,8 +29,13 @@ jobs:
       - name: Install Erlang & Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
+          otp-version: "27.2"
           elixir-version: "1.18.1"
+
+      - name: Print OTP / NIF versions
+        run: |
+          erl -noshell -eval 'io:format("OTP=~s NIF=~p~n", [erlang:system_info(otp_release), erlang:system_info(nif_version)]), halt().'
+          elixir -e 'IO.puts("Elixir=" <> System.version())'
 
       - name: Install system dependencies
         run: |
@@ -55,8 +56,8 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-x86_64-otp-${{ matrix.otp }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-x86_64-otp-${{ matrix.otp }}-mix-
+          key: ${{ runner.os }}-x86_64-otp-27.2-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-x86_64-otp-27.2-mix-
 
       - name: Install dependencies
         run: |
@@ -95,18 +96,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
         with:
-          files: cache/${{ matrix.otp }}/*.tar.gz
+          files: cache/*.tar.gz
 
   linux-aarch64:
     name: Linux (aarch64)
     runs-on: ubuntu-22.04-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        otp: ["26.2", "27.2"]
     env:
       MIX_ENV: prod
-      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache/${{ matrix.otp }}
+      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
 
     steps:
       - name: Checkout
@@ -115,8 +112,13 @@ jobs:
       - name: Install Erlang & Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
+          otp-version: "27.2"
           elixir-version: "1.18.1"
+
+      - name: Print OTP / NIF versions
+        run: |
+          erl -noshell -eval 'io:format("OTP=~s NIF=~p~n", [erlang:system_info(otp_release), erlang:system_info(nif_version)]), halt().'
+          elixir -e 'IO.puts("Elixir=" <> System.version())'
 
       - name: Install system dependencies
         run: |
@@ -137,8 +139,8 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-aarch64-otp-${{ matrix.otp }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-aarch64-otp-${{ matrix.otp }}-mix-
+          key: ${{ runner.os }}-aarch64-otp-27.2-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-aarch64-otp-27.2-mix-
 
       - name: Install dependencies
         run: |
@@ -177,18 +179,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
         with:
-          files: cache/${{ matrix.otp }}/*.tar.gz
+          files: cache/*.tar.gz
 
   linux-aarch64-arduino-uno-q:
     name: Linux (aarch64, Arduino Uno Q)
     runs-on: ubuntu-22.04-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        otp: ["26.2", "27.2"]
     env:
       MIX_ENV: prod
-      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache/${{ matrix.otp }}
+      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
       PRECOMPILE_TARGET: aarch64-arduino-uno-q-linux-gnu
       TARGET_ARCH: aarch64
       TARGET_OS: arduino-uno-q-linux
@@ -201,8 +199,13 @@ jobs:
       - name: Install Erlang & Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
+          otp-version: "27.2"
           elixir-version: "1.18.1"
+
+      - name: Print OTP / NIF versions
+        run: |
+          erl -noshell -eval 'io:format("OTP=~s NIF=~p~n", [erlang:system_info(otp_release), erlang:system_info(nif_version)]), halt().'
+          elixir -e 'IO.puts("Elixir=" <> System.version())'
 
       - name: Install system dependencies
         run: |
@@ -223,8 +226,8 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-aarch64-arduino-uno-q-otp-${{ matrix.otp }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-aarch64-arduino-uno-q-otp-${{ matrix.otp }}-mix-
+          key: ${{ runner.os }}-aarch64-arduino-uno-q-otp-27.2-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-aarch64-arduino-uno-q-otp-27.2-mix-
 
       - name: Install dependencies
         run: |
@@ -263,18 +266,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
         with:
-          files: cache/${{ matrix.otp }}/*.tar.gz
+          files: cache/*.tar.gz
 
   macos:
     name: macOS
     runs-on: macos-14
-    strategy:
-      fail-fast: false
-      matrix:
-        otp: ["26.2", "27.2"]
     env:
       MIX_ENV: prod
-      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache/${{ matrix.otp }}
+      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
 
     steps:
       - name: Checkout
@@ -283,13 +282,17 @@ jobs:
       - name: Install Erlang & Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
+          otp-version: "27.2"
           elixir-version: "1.18.1"
+
+      - name: Print OTP / NIF versions
+        run: |
+          erl -noshell -eval 'io:format("OTP=~s NIF=~p~n", [erlang:system_info(otp_release), erlang:system_info(nif_version)]), halt().'
+          elixir -e 'IO.puts("Elixir=" <> System.version())'
 
       - name: Install system dependencies
         run: |
           brew install fftw
-          mix local.hex --force
           mix local.hex --force
           mix local.rebar --force
 
@@ -305,8 +308,8 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-otp-${{ matrix.otp }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-otp-${{ matrix.otp }}-mix-
+          key: ${{ runner.os }}-otp-27.2-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-otp-27.2-mix-
 
       - name: Install dependencies
         run: mix deps.get
@@ -346,19 +349,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
         with:
-          files: cache/${{ matrix.otp }}/*.tar.gz
+          files: cache/*.tar.gz
 
   # x86_64 macOS build on older runner
   macos-x86:
     name: macOS (x86_64)
     runs-on: macos-15-intel
-    strategy:
-      fail-fast: false
-      matrix:
-        otp: ["26.2", "27.2"]
     env:
       MIX_ENV: prod
-      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache/${{ matrix.otp }}
+      ELIXIR_MAKE_CACHE_DIR: ${{ github.workspace }}/cache
 
     steps:
       - name: Checkout
@@ -367,8 +366,13 @@ jobs:
       - name: Install Erlang & Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
+          otp-version: "27.2"
           elixir-version: "1.18.1"
+
+      - name: Print OTP / NIF versions
+        run: |
+          erl -noshell -eval 'io:format("OTP=~s NIF=~p~n", [erlang:system_info(otp_release), erlang:system_info(nif_version)]), halt().'
+          elixir -e 'IO.puts("Elixir=" <> System.version())'
 
       - name: Install system dependencies
         run: |
@@ -388,8 +392,8 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-x86-otp-${{ matrix.otp }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-x86-otp-${{ matrix.otp }}-mix-
+          key: ${{ runner.os }}-x86-otp-27.2-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-x86-otp-27.2-mix-
 
       - name: Install dependencies
         run: mix deps.get
@@ -429,4 +433,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch'
         with:
-          files: cache/${{ matrix.otp }}/*.tar.gz
+          files: cache/*.tar.gz
