@@ -41,7 +41,12 @@ defmodule NxEigen.MixProject do
 
       # Package configuration
       package: package(),
-      description: "High-performance numerical computing with Eigen backend"
+      description: "High-performance numerical computing with Eigen backend",
+
+      # Documentation configuration
+      docs: docs(),
+      name: "NxEigen",
+      source_url: @source_url
     ]
   end
 
@@ -72,7 +77,7 @@ defmodule NxEigen.MixProject do
       {:elixir_make, "~> 0.8", runtime: false},
       {:cc_precompiler, "~> 0.1", runtime: false},
       {:fine, "~> 0.1.0"},
-      {:ex_doc, "~>  0.40", only: :dev, runtime: false},
+      {:ex_doc, "~>  0.40", only: :dev, runtime: false}
     ]
   end
 
@@ -90,6 +95,21 @@ defmodule NxEigen.MixProject do
       ],
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => @source_url}
+    ]
+  end
+
+  defp docs do
+    [
+      main: "README",
+      source_ref: "v#{@version}",
+      source_url: @source_url,
+      extras: [
+        "README.md",
+        "PRECOMPILATION.md"
+      ],
+      groups_for_modules: [
+        Core: [NxEigen, NxEigen.Backend]
+      ]
     ]
   end
 

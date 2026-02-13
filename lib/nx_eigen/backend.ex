@@ -1,4 +1,39 @@
 defmodule NxEigen.Backend do
+  @moduledoc """
+  Nx.Backend implementation using the Eigen C++ library for high-performance numerical computing.
+
+  This module implements all required callbacks from the `Nx.Backend` behavior, providing
+  efficient tensor operations backed by the Eigen library. Operations are executed through
+  NIFs (Native Implemented Functions) that call optimized C++ code.
+
+  ## Implementation Details
+
+  - **Tensor storage**: Flat 1D arrays using `Eigen::Array<Scalar, Dynamic, 1>`
+  - **Type system**: All Nx types supported via `std::variant` with runtime dispatch
+  - **Memory management**: Automatic resource cleanup via BEAM garbage collection
+  - **Matrix operations**: Leverages Eigen's BLAS-like optimized routines
+  - **FFT operations**: Pluggable interface with FFTW3 as the default implementation
+
+  ## Type Support
+
+  All Nx types are fully supported:
+  - Unsigned integers: u8, u16, u32, u64
+  - Signed integers: s8, s16, s32, s64
+  - Floating point: f32, f64
+  - Complex: c64, c128
+
+  ## Performance
+
+  NxEigen is optimized for embedded systems with special tuning for platforms like
+  Arduino Uno Q. Matrix operations use Eigen's optimized routines which provide
+  BLAS-like performance without external dependencies.
+
+  You typically don't need to interact with this module directly. Use `NxEigen.tensor/2`
+  to create tensors with this backend, or set it as your default backend:
+
+      Nx.default_backend(NxEigen.Backend)
+  """
+
   @behaviour Nx.Backend
 
   defstruct [:state]

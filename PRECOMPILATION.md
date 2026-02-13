@@ -84,7 +84,7 @@ export TARGET_ABI=gnu
 
 Without these variables, the generic `aarch64-linux-gnu` binary will be used (which still works, but is ~20% slower).
 
-See [ARDUINO_UNO_Q_QUICKSTART.md](ARDUINO_UNO_Q_QUICKSTART.md) for setup instructions.
+See the [Arduino Uno Q section in the README](README.md#using-with-arduino-uno-q) for detailed setup instructions.
 
 ## CI/CD Pipeline
 

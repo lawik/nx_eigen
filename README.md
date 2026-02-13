@@ -1,6 +1,22 @@
 # NxEigen
 
-An Elixir Nx backend that binds the [Eigen C++ library](https://eigen.tuxfamily.org) for efficient numerical computing on embedded systems, specifically targeting the Arduino Uno Q.
+[![CI](https://github.com/polvalente/nx_eigen/actions/workflows/ci.yml/badge.svg)](https://github.com/polvalente/nx_eigen/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/nx_eigen.svg)](https://hex.pm/packages/nx_eigen)
+[![Hexdocs.pm](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/nx_eigen)
+
+**High-performance numerical computing for Elixir on embedded systems.**
+
+NxEigen is an [Nx](https://github.com/elixir-nx/nx) backend that binds the [Eigen C++ library](https://eigen.tuxfamily.org) to provide efficient linear algebra and tensor operations. It's specifically optimized for embedded Linux systems like the Arduino Uno Q, bringing BLAS-like performance without external dependencies.
+
+## Why NxEigen?
+
+- **Native performance**: C++ implementation with Eigen's optimized matrix operations
+- **Embedded-ready**: Designed for resource-constrained devices; no heavy dependencies
+- **Complete Nx integration**: Drop-in replacement for other Nx backends
+- **Hardware acceleration**: Optimized builds for ARM platforms (NEON, crypto extensions)
+- **Zero-dependency math**: Includes static-linked FFTW3 in precompiled binaries
+
+Perfect for running machine learning inference, signal processing, and control algorithms on edge devices.
 
 ## Features
 
@@ -384,29 +400,20 @@ Check you have the optimized binary:
 ls ~/.cache/elixir_make/nx_eigen-nif-*
 ```
 
-### Documentation
-
-- **[ARDUINO_UNO_Q_QUICKSTART.md](ARDUINO_UNO_Q_QUICKSTART.md)** - TL;DR setup guide
-- **[ARDUINO_UNO_Q.md](ARDUINO_UNO_Q.md)** - Complete deployment guide with examples
-- **[TARGET_DETECTION_ISSUE.md](TARGET_DETECTION_ISSUE.md)** - Technical details on target detection
-
 ## License
 
 Copyright (c) 2025
 
 ## Documentation
 
-### Quick Links
+Full API documentation is available on [HexDocs](https://hexdocs.pm/nx_eigen).
 
-- **[Arduino Uno Q Setup](ARDUINO_UNO_Q_QUICKSTART.md)** - Arduino Uno Q quick start guide
-- **[Precompilation Guide](PRECOMPILATION.md)** - Building precompiled binaries
-- **[Testing Precompiled Binaries](TESTING_PRECOMPILED.md)** - Testing precompiled binaries
-- **[Documentation Index](DOCUMENTATION_INDEX.md)** - Complete documentation overview
-
-### API Documentation
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc):
+You can also generate documentation locally:
 
 ```bash
 mix docs
 ```
+
+### Additional Guides
+
+- **[Precompilation Guide](PRECOMPILATION.md)** - Building precompiled binaries for different platforms
