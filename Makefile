@@ -32,7 +32,7 @@ NX_EIGEN_FFT_LIB ?= fftw
 NX_EIGEN_FFT_SO  ?=
 
 CFLAGS = -fPIC -I$(ERL_INCLUDE_DIR) -I$(EIGEN_INCLUDE) -I$(FINE_INCLUDE) -Ic_src -O3 -std=c++17
-LDFLAGS = -shared
+LDFLAGS = -shared -fvisibility=hidden
 
 # Resolve FFT sources and link flags
 FFT_SRCS =
@@ -46,7 +46,7 @@ else ifeq ($(NX_EIGEN_FFT_LIB),fftw)
   FFT_SRCS = c_src/nx_eigen_fft_fftw.cpp
 
   # Determine pkg-config command (handle cross-compilation)
-  PKG_CONFIG ?= pkg-config
+  PKG_CONFIG ?= pkg-configx
 
   # Try pkg-config first
   PKG_CONFIG_FFTW3 := $(shell $(PKG_CONFIG) --exists fftw3 2>/dev/null && echo yes)
