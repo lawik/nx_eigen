@@ -15,7 +15,7 @@ endif
 EIGEN_VERSION = 3.4.0
 EIGEN_DIR ?= $(CURDIR)/eigen-$(EIGEN_VERSION)
 EIGEN_INCLUDE = $(EIGEN_DIR)
-FINE_INCLUDE = $(CURDIR)/deps/fine/c_include
+FINE_INCLUDE ?= $(error FINE_INCLUDE is not set. Use mix compile instead of bare make.)
 
 # FFT library choice
 # The NIF calls a pluggable C interface (see c_src/nx_eigen_fft.h).
@@ -88,7 +88,11 @@ else
 	LDFLAGS += -Wl,-rpath,'$$ORIGIN' -Wl,-rpath,'$$ORIGIN/../lib'
 endif
 
-LIB_NAME = priv/libnx_eigen.so
+# When invoked by elixir_make, MIX_APP_PATH points to _build/env/lib/app.
+# Writing the .so there (rather than project-root priv/) is required so that
+# cc_precompiler can find the artifact when building the release tarball.
+PRIV_DIR = $(if $(MIX_APP_PATH),$(MIX_APP_PATH)/priv,priv)
+LIB_NAME = $(PRIV_DIR)/libnx_eigen.so
 
 # Optional CMake build (useful for cross-compilation via toolchain files)
 USE_CMAKE ?= 0
@@ -99,7 +103,7 @@ CMAKE_TOOLCHAIN_FILE ?=
 CMAKE_ARGS ?=
 SKIP_DOWNLOADS ?= 0
 
-all: check-deps priv $(LIB_NAME)
+all: check-deps $(PRIV_DIR) $(LIB_NAME)
 
 # Check dependencies without rebuilding
 check-deps:
@@ -109,17 +113,19 @@ check-deps:
 		(echo "Failed to download Eigen. Please install manually or set EIGEN_DIR=/path/to/eigen"; exit 1); \
 	fi
 
-priv:
+$(PRIV_DIR):
 	@mkdir -p priv
+	@mkdir -p "$(PRIV_DIR)"
 
-$(LIB_NAME): c_src/nx_eigen_nif.cpp c_src/nx_eigen_fft.h $(FFT_SRCS) | check-deps priv
+$(LIB_NAME): c_src/nx_eigen_nif.cpp c_src/nx_eigen_fft.h $(FFT_SRCS) | check-deps $(PRIV_DIR)
 ifeq ($(USE_CMAKE),1)
 	$(CMAKE) -S $(CURDIR) -B $(CMAKE_BUILD_DIR) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
 		$(if $(CMAKE_TOOLCHAIN_FILE),-DCMAKE_TOOLCHAIN_FILE=$(CMAKE_TOOLCHAIN_FILE),) \
 		$(CMAKE_ARGS) \
 		-DERL_INCLUDE_DIR=$(ERL_INCLUDE_DIR) -DEIGEN_DIR=$(EIGEN_DIR) -DFINE_INCLUDE=$(FINE_INCLUDE) \
 		-DNX_EIGEN_FFT_LIB=$(NX_EIGEN_FFT_LIB) \
-		$(if $(NX_EIGEN_FFT_SO),-DNX_EIGEN_FFT_SO=$(NX_EIGEN_FFT_SO),)
+		$(if $(NX_EIGEN_FFT_SO),-DNX_EIGEN_FFT_SO=$(NX_EIGEN_FFT_SO),) \
+		$(if $(MIX_APP_PATH),-DAPP_PRIV=$(MIX_APP_PATH)/priv,)
 	$(CMAKE) --build $(CMAKE_BUILD_DIR) --config $(CMAKE_BUILD_TYPE) --parallel
 else
 	$(CXX) $(CFLAGS) $(FFT_CFLAGS) c_src/nx_eigen_nif.cpp $(FFT_SRCS) $(LDFLAGS) $(FFT_LDFLAGS) -o $(LIB_NAME)

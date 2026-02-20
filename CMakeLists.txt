@@ -6,6 +6,8 @@ project(nx_eigen_nif LANGUAGES CXX)
 set(ERL_INCLUDE_DIR "" CACHE PATH "Path to Erlang/ERTS include directory (contains erl_nif.h)")
 set(EIGEN_DIR "" CACHE PATH "Path to Eigen include directory (contains Eigen/)")
 set(FINE_INCLUDE "" CACHE PATH "Path to Fine C include directory (contains fine.hpp)")
+# Output directory for the NIF .so (passed as MIX_APP_PATH/priv by elixir_make)
+set(APP_PRIV "" CACHE PATH "Output priv directory (set by elixir_make via MIX_APP_PATH)")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,9 +26,16 @@ set_target_properties(nx_eigen PROPERTIES
   SUFFIX ".so"            # Erlang loads NIFs as .so even on macOS
 )
 
-# Always place the built NIF exactly where :code.priv_dir expects it.
+# Place the built NIF where elixir_make/cc_precompiler expect it.
+# APP_PRIV is passed by the Makefile when MIX_APP_PATH is set (elixir_make sets it).
+# Fall back to ${CMAKE_SOURCE_DIR}/priv for standalone cmake invocations.
+if(NOT APP_PRIV STREQUAL "")
+  set(NIF_OUTPUT_DIR "${APP_PRIV}")
+else()
+  set(NIF_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/priv")
+endif()
 set_target_properties(nx_eigen PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/priv"
+  LIBRARY_OUTPUT_DIRECTORY "${NIF_OUTPUT_DIR}"
 )
 
 target_compile_options(nx_eigen PRIVATE -O3)

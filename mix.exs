@@ -51,7 +51,14 @@ defmodule NxEigen.MixProject do
   end
 
   defp make_env do
-    %{}
+    fine_include =
+      if Code.ensure_loaded?(Fine) do
+        Fine.include_dir()
+      else
+        Path.join([File.cwd!(), "deps", "fine", "c_include"])
+      end
+
+    %{"FINE_INCLUDE" => fine_include}
     |> forward_env("NX_EIGEN_FFT_LIB")
     |> forward_env("NX_EIGEN_FFT_SO")
   end
