@@ -292,7 +292,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          brew install fftw
+          brew install fftw pkg-config
           mix local.hex --force
           mix local.rebar --force
 
@@ -376,7 +376,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          brew install fftw
+          brew install fftw pkg-config
           mix local.hex --force
           mix local.rebar --force
 

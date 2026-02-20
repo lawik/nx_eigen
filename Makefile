@@ -46,7 +46,7 @@ else ifeq ($(NX_EIGEN_FFT_LIB),fftw)
   FFT_SRCS = c_src/nx_eigen_fft_fftw.cpp
 
   # Determine pkg-config command (handle cross-compilation)
-  PKG_CONFIG ?= pkg-configx
+  PKG_CONFIG ?= pkg-config
 
   # Try pkg-config first
   PKG_CONFIG_FFTW3 := $(shell $(PKG_CONFIG) --exists fftw3 2>/dev/null && echo yes)

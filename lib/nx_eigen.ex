@@ -46,15 +46,13 @@ defmodule NxEigen do
 
       iex> NxEigen.tensor([1, 2, 3])
       #Nx.Tensor<
-        s64[3]
-        NxEigen.Backend
+        s32[3]
         [1, 2, 3]
       >
 
       iex> NxEigen.tensor([[1.0, 2.0], [3.0, 4.0]], type: {:f, 32})
       #Nx.Tensor<
         f32[2][2]
-        NxEigen.Backend
         [
           [1.0, 2.0],
           [3.0, 4.0]
