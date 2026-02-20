@@ -1,7 +1,7 @@
 defmodule NxEigen.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.1.1"
   @source_url "https://github.com/polvalente/nx_eigen"
   @cc_template "<%= cc %>"
   @cxx_template "<%= cxx %>"
