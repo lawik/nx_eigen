@@ -140,16 +140,18 @@ After GitHub Actions has uploaded all precompiled binaries to the release:
 
 ```bash
 # Download all artifacts and generate checksum file
-MIX_ENV=prod mix elixir_make.checksum --all --print
+# PRECOMPILE_TARGET=all is required to include all OS/arch combinations,
+# not just the native architecture of the machine running the command.
+MIX_ENV=prod PRECOMPILE_TARGET=all mix elixir_make.checksum --all --print
 
 # Or if some targets are not yet available:
-MIX_ENV=prod mix elixir_make.checksum --all --print --ignore-unavailable
+MIX_ENV=prod PRECOMPILE_TARGET=all mix elixir_make.checksum --all --print --ignore-unavailable
 ```
 
-This creates `checksum-nx_eigen.exs` which **must be committed** and included in the package.
+This creates `checksum.exs` which **must be committed** and included in the package.
 
 ```bash
-git add checksum-nx_eigen.exs
+git add checksum.exs
 git commit -m "Add precompiled binary checksums for v0.1.0"
 git push
 ```
@@ -217,8 +219,8 @@ mix elixir_make.precompile
 1. ✅ Update version in `mix.exs`
 2. ✅ Commit and tag: `git tag v0.1.0 && git push origin v0.1.0`
 3. ✅ Wait for GitHub Actions to complete
-4. ✅ Generate checksum: `MIX_ENV=prod PRECOMPILE_TARGET=all mix elixir_make.checksum --all --print`
-5. ✅ Commit checksum file: `git add checksum.exs && git commit -m "Add checksums"`
+4. ✅ Generate checksum: `MIX_ENV=prod PRECOMPILE_TARGET=all mix elixir_make.checksum --all --print` (wait for all CI jobs to finish first)
+5. ✅ Commit checksum file: `git add checksum.exs && git commit -m "Add checksums for vX.Y.Z"`
 6. ✅ Publish to Hex: `mix hex.publish`
 
 ## Troubleshooting
