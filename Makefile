@@ -31,7 +31,16 @@ FINE_INCLUDE ?= $(error FINE_INCLUDE is not set. Use mix compile instead of bare
 NX_EIGEN_FFT_LIB ?= fftw
 NX_EIGEN_FFT_SO  ?=
 
-CFLAGS = -fPIC -I$(ERL_INCLUDE_DIR) -I$(EIGEN_INCLUDE) -I$(FINE_INCLUDE) -Ic_src -O3 -std=c++17
+# Statically link FFTW3 (.a archives) when available, so the built .so doesn't
+# depend on libfftw3.so.3/libfftw3f.so.3 being installed on the target system.
+# Mirrors CMakeLists.txt's NX_EIGEN_FFT_STATIC. Set to 0 to force dynamic linking.
+NX_EIGEN_FFT_STATIC ?= 1
+
+# Extra compiler flags appended verbatim, e.g. for experimenting with
+# custom -march/-mtune targets: NX_EIGEN_EXTRA_CFLAGS="-march=armv8.2-a+dotprod"
+NX_EIGEN_EXTRA_CFLAGS ?=
+
+CFLAGS = -fPIC -I$(ERL_INCLUDE_DIR) -I$(EIGEN_INCLUDE) -I$(FINE_INCLUDE) -Ic_src -O3 -std=c++17 $(NX_EIGEN_EXTRA_CFLAGS)
 LDFLAGS = -shared -fvisibility=hidden
 
 # Resolve FFT sources and link flags
@@ -52,11 +61,25 @@ else ifeq ($(NX_EIGEN_FFT_LIB),fftw)
   PKG_CONFIG_FFTW3 := $(shell $(PKG_CONFIG) --exists fftw3 2>/dev/null && echo yes)
   ifeq ($(PKG_CONFIG_FFTW3),yes)
     FFT_CFLAGS = $(shell $(PKG_CONFIG) --cflags fftw3 fftw3f)
-    FFT_LDFLAGS = $(shell $(PKG_CONFIG) --libs fftw3 fftw3f)
-    # Add rpath for runtime library discovery
     FFTW_LIBDIR := $(shell $(PKG_CONFIG) --variable=libdir fftw3 2>/dev/null)
-    ifneq ($(FFTW_LIBDIR),)
-      FFT_LDFLAGS += -Wl,-rpath,$(FFTW_LIBDIR)
+    FFTW3_STATIC_A := $(wildcard $(FFTW_LIBDIR)/libfftw3.a)
+    FFTW3F_STATIC_A := $(wildcard $(FFTW_LIBDIR)/libfftw3f.a)
+    USE_STATIC_FFTW3 :=
+    ifeq ($(NX_EIGEN_FFT_STATIC),1)
+      ifneq ($(FFTW3_STATIC_A),)
+        ifneq ($(FFTW3F_STATIC_A),)
+          USE_STATIC_FFTW3 := 1
+        endif
+      endif
+    endif
+    ifeq ($(USE_STATIC_FFTW3),1)
+      FFT_LDFLAGS = $(FFTW3_STATIC_A) $(FFTW3F_STATIC_A)
+    else
+      FFT_LDFLAGS = $(shell $(PKG_CONFIG) --libs fftw3 fftw3f)
+      # Add rpath for runtime library discovery (dynamic linking only)
+      ifneq ($(FFTW_LIBDIR),)
+        FFT_LDFLAGS += -Wl,-rpath,$(FFTW_LIBDIR)
+      endif
     endif
   else
     # Fallback for cross-compilation with sysroot
@@ -125,6 +148,7 @@ ifeq ($(USE_CMAKE),1)
 		-DERL_INCLUDE_DIR=$(ERL_INCLUDE_DIR) -DEIGEN_DIR=$(EIGEN_DIR) -DFINE_INCLUDE=$(FINE_INCLUDE) \
 		-DNX_EIGEN_FFT_LIB=$(NX_EIGEN_FFT_LIB) \
 		$(if $(NX_EIGEN_FFT_SO),-DNX_EIGEN_FFT_SO=$(NX_EIGEN_FFT_SO),) \
+		$(if $(NX_EIGEN_EXTRA_CFLAGS),-DCMAKE_CXX_FLAGS="$(NX_EIGEN_EXTRA_CFLAGS)",) \
 		$(if $(MIX_APP_PATH),-DAPP_PRIV=$(MIX_APP_PATH)/priv,)
 	$(CMAKE) --build $(CMAKE_BUILD_DIR) --config $(CMAKE_BUILD_TYPE) --parallel
 else

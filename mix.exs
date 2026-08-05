@@ -16,7 +16,12 @@ defmodule NxEigen.MixProject do
       compilers: [:elixir_make] ++ Mix.compilers(),
       make_targets: ["all"],
       make_clean: ["clean"],
-      make_env: make_env(),
+      # A function, not a literal map: `project/0` runs during dependency-graph
+      # resolution too, before `fine` (or any dep) is fetched/compiled, so
+      # `Code.ensure_loaded?(Fine)` would always be false if evaluated eagerly
+      # here. elixir_make calls functions passed to `make_env` lazily, right
+      # before invoking `make`, by which point `fine` is already compiled.
+      make_env: &make_env/0,
       deps: deps(),
 
       # Precompilation configuration
@@ -54,16 +59,15 @@ defmodule NxEigen.MixProject do
   end
 
   defp make_env do
-    fine_include =
-      if Code.ensure_loaded?(Fine) do
-        Fine.include_dir()
-      else
-        Path.join([File.cwd!(), "deps", "fine", "c_include"])
-      end
+    # Same as EXLA's mix.exs: `fine` is a compile-time-only dep (runtime: false),
+    # so by the time this function runs (right before `make`), it's guaranteed
+    # to already be compiled and on the code path.
+    fine_include = System.get_env("FINE_INCLUDE") || Fine.include_dir()
 
     %{"FINE_INCLUDE" => fine_include}
     |> forward_env("NX_EIGEN_FFT_LIB")
     |> forward_env("NX_EIGEN_FFT_SO")
+    |> forward_env("NX_EIGEN_EXTRA_CFLAGS")
   end
 
   defp forward_env(env, var) do
