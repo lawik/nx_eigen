@@ -28,7 +28,10 @@ defmodule NxEigen.DocTest do
     atanh: 1,
     cosh: 1,
     ceil: 1,
-    erfc: 1
+    erfc: 1,
+    exp: 1,
+    log1p: 1,
+    rsqrt: 1
   ]
 
   @unsupported_ops [

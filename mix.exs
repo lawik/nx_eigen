@@ -87,7 +87,7 @@ defmodule NxEigen.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:nx, "~> 0.10"},
+      {:nx, "~> 0.13"},
       {:elixir_make, "~> 0.8", runtime: false},
       {:cc_precompiler, "~> 0.1", runtime: false},
       {:fine, "~> 0.1.0"},
