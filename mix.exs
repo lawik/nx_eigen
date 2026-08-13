@@ -19,25 +19,8 @@ defmodule NxEigen.MixProject do
       make_env: make_env(),
       deps: deps(),
 
-      # Precompilation configuration
-      make_precompiler: {:nif, CCPrecompiler},
-      make_precompiler_url: "#{@source_url}/releases/download/v#{@version}/@{artefact_filename}",
-      make_precompiler_filename: "libnx_eigen",
-      make_precompiler_priv_paths: ["libnx_eigen.so"],
-      make_precompiler_nif_versions: [versions: ["2.17"]],
-      cc_precompiler: [
-        cleanup: "clean",
-        cmake_lists_path: "CMakeLists.txt",
-        cmake_build_type: "Release",
-        cmake_flags: ["-DNX_EIGEN_FFT_LIB=fftw"],
-        # Restrict targets to those we explicitly list for the current OS.
-        # This prevents macOS runners from attempting to build both archs in one job.
-        only_listed_targets: true,
-        compilers: %{
-          {:unix, :linux} => linux_targets_at_compile_time(),
-          {:unix, :darwin} => macos_targets()
-        }
-      ],
+      # Precompilation disabled for local/Nerves development
+      # make_precompiler: {:nif, CCPrecompiler},
 
       # Package configuration
       package: package(),
@@ -58,9 +41,17 @@ defmodule NxEigen.MixProject do
         Path.join([File.cwd!(), "deps", "fine", "c_include"])
       end
 
-    %{"FINE_INCLUDE" => fine_include}
-    |> forward_env("NX_EIGEN_FFT_LIB")
-    |> forward_env("NX_EIGEN_FFT_SO")
+    env =
+      %{"FINE_INCLUDE" => fine_include}
+      |> forward_env("NX_EIGEN_FFT_LIB")
+      |> forward_env("NX_EIGEN_FFT_SO")
+
+    # When cross-compiling for Nerves, allow overriding CXX via NX_EIGEN_CXX
+    # to use a vendor toolchain with a compatible glibc
+    case System.get_env("NX_EIGEN_CXX") do
+      nil -> env
+      cxx -> Map.put(env, "CXX", cxx)
+    end
   end
 
   defp forward_env(env, var) do
