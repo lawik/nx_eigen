@@ -88,6 +88,18 @@ else
 	LDFLAGS += -Wl,-rpath,'$$ORIGIN' -Wl,-rpath,'$$ORIGIN/../lib'
 endif
 
+# When cross-compiling, link the sysroot's shared libm by path. Toolchain
+# sysroots can carry a broken lib64/libm.so symlink, in which case ld quietly
+# extracts members from the static libm.a instead; those objects reference
+# glibc-internal symbols (e.g. __scalbn) that the target's runtime libm does
+# not export, so the NIF links fine but fails to load on the device.
+ifneq ($(CROSSCOMPILE),)
+  SYSROOT_LIBM := $(wildcard $(shell $(CXX) -print-sysroot)/lib/libm.so.6)
+  ifneq ($(SYSROOT_LIBM),)
+    LDFLAGS += $(SYSROOT_LIBM)
+  endif
+endif
+
 # When invoked by elixir_make, MIX_APP_PATH points to _build/env/lib/app.
 # Writing the .so there (rather than project-root priv/) is required so that
 # cc_precompiler can find the artifact when building the release tarball.
