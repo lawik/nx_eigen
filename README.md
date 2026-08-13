@@ -82,12 +82,14 @@ sudo dnf install fftw-devel
 
 ##### Configuration
 
-Two environment variables control FFT at build time:
+A few environment variables control FFT and compiler flags at build time:
 
-| Variable             | Values / meaning                                                     |
-|----------------------|----------------------------------------------------------------------|
-| `NX_EIGEN_FFT_LIB`  | `fftw` **(default)** · `none` (stubs that return errors)             |
-| `NX_EIGEN_FFT_SO`   | Absolute path to a custom `.so` – **overrides** `NX_EIGEN_FFT_LIB`  |
+| Variable                 | Values / meaning                                                          |
+|--------------------------|----------------------------------------------------------------------------|
+| `NX_EIGEN_FFT_LIB`       | `fftw` **(default)** · `none` (stubs that return errors)                    |
+| `NX_EIGEN_FFT_SO`        | Absolute path to a custom `.so` – **overrides** `NX_EIGEN_FFT_LIB`         |
+| `NX_EIGEN_FFT_STATIC`    | `1`/`ON` **(default)** · `0`/`OFF`. Prefer FFTW3's `.a` archives so the built NIF doesn't need `libfftw3.so.3` installed on the target. Falls back to dynamic linking with a warning if no `.a` is found. |
+| `NX_EIGEN_EXTRA_CFLAGS`  | Extra compiler flags appended verbatim, e.g. `-march=`/`-mtune=` for a specific CPU. |
 
 Examples:
 
@@ -98,6 +100,14 @@ mix compile
 
 # Use a custom FFT shared library
 export NX_EIGEN_FFT_SO=/path/to/libmy_fft.so
+mix compile
+
+# Force dynamic FFTW linking (e.g. no static libs installed)
+export NX_EIGEN_FFT_STATIC=0
+mix compile
+
+# Experiment with a custom target architecture
+export NX_EIGEN_EXTRA_CFLAGS="-march=armv8.2-a+dotprod -mtune=cortex-a76"
 mix compile
 ```
 
