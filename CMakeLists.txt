@@ -28,11 +28,14 @@ set_target_properties(nx_eigen PROPERTIES
 
 # Place the built NIF where elixir_make/cc_precompiler expect it.
 # APP_PRIV is passed by the Makefile when MIX_APP_PATH is set (elixir_make sets it).
-# Fall back to ${CMAKE_SOURCE_DIR}/priv for standalone cmake invocations.
+# Fall back to ${CMAKE_BINARY_DIR}/priv for standalone cmake invocations.
+# Never write into ${CMAKE_SOURCE_DIR}/priv: a priv/ dir in the source tree
+# makes Mix symlink every consumer's _build priv to it, so host and cross
+# builds would share (and clobber) a single .so.
 if(NOT APP_PRIV STREQUAL "")
   set(NIF_OUTPUT_DIR "${APP_PRIV}")
 else()
-  set(NIF_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/priv")
+  set(NIF_OUTPUT_DIR "${CMAKE_BINARY_DIR}/priv")
 endif()
 set_target_properties(nx_eigen PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${NIF_OUTPUT_DIR}"

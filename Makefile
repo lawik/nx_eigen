@@ -101,9 +101,18 @@ ifneq ($(CROSSCOMPILE),)
 endif
 
 # When invoked by elixir_make, MIX_APP_PATH points to _build/env/lib/app.
-# Writing the .so there (rather than project-root priv/) is required so that
-# cc_precompiler can find the artifact when building the release tarball.
-PRIV_DIR = $(if $(MIX_APP_PATH),$(MIX_APP_PATH)/priv,priv)
+# The .so MUST be written there and NEVER to the project-root priv/: if the
+# source tree grows a priv/ directory, Mix symlinks every consumer's
+# _build/<env+target>/lib/nx_eigen/priv to it, so host and cross builds
+# clobber each other's NIF (whichever compiled last wins on the next load).
+ifeq ($(MIX_APP_PATH),)
+  ifeq ($(filter clean precompile test-precompiled test-precompiled-target,$(MAKECMDGOALS)),)
+    $(error MIX_APP_PATH is not set. Build via mix compile (elixir_make); a bare \
+make would write priv/ into the source tree, which makes Mix symlink all \
+_build priv dirs to one shared .so)
+  endif
+endif
+PRIV_DIR = $(MIX_APP_PATH)/priv
 LIB_NAME = $(PRIV_DIR)/libnx_eigen.so
 
 # Optional CMake build (useful for cross-compilation via toolchain files)
@@ -126,7 +135,6 @@ check-deps:
 	fi
 
 $(PRIV_DIR):
-	@mkdir -p priv
 	@mkdir -p "$(PRIV_DIR)"
 
 $(LIB_NAME): c_src/nx_eigen_nif.cpp c_src/nx_eigen_fft.h $(FFT_SRCS) | check-deps $(PRIV_DIR)
