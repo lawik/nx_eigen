@@ -124,7 +124,18 @@ CMAKE_TOOLCHAIN_FILE ?=
 CMAKE_ARGS ?=
 SKIP_DOWNLOADS ?= 0
 
-all: check-deps $(PRIV_DIR) $(LIB_NAME)
+all: check-deps fix-priv $(PRIV_DIR) $(LIB_NAME)
+
+# Self-heal checkouts from before the priv/ fix: Mix symlinked
+# _build/<env+target>/lib/nx_eigen/priv to the source tree's priv/, which
+# made every target share one .so. Drop the symlink (a real dir replaces
+# it) and remove any stray source-tree priv/ so Mix stops re-creating it.
+fix-priv:
+	@if [ -L "$(PRIV_DIR)" ]; then \
+		echo "nx_eigen: replacing legacy priv symlink with a real directory"; \
+		rm "$(PRIV_DIR)"; \
+	fi
+	@if [ -d priv ] && [ ! -L priv ]; then rm -rf priv; fi
 
 # Check dependencies without rebuilding
 check-deps:
@@ -169,5 +180,5 @@ test-precompiled-target:
 	fi
 	@bash scripts/test-precompiled.sh $(TARGET)
 
-.PHONY: all clean check-deps precompile test-precompiled test-precompiled-target
+.PHONY: all clean check-deps fix-priv precompile test-precompiled test-precompiled-target
 
