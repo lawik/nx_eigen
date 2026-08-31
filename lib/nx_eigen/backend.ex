@@ -747,6 +747,12 @@ defmodule NxEigen.Backend do
     raise "reduce/5 not supported for NxEigen"
   end
 
+  # Nx.block/4 extension point - no native implementation, so just run the composite function
+  @impl true
+  def block(struct, _output, args, fun) do
+    apply(fun, [struct | args])
+  end
+
   # Window operations
   @impl true
   def window_sum(out, tensor, window_dimensions, opts) do

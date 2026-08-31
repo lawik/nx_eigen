@@ -70,6 +70,16 @@ jobs:
           mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
           mix elixir_make.precompile
 
+      - name: Verify FFTW is statically linked
+        run: |
+          # README promises FFTW3 doesn't need to be installed separately on
+          # Linux; a NEEDED entry for it here means static linking regressed.
+          if readelf -d priv/libnx_eigen.so | grep -qi 'NEEDED.*libfftw3'; then
+            echo "ERROR: libnx_eigen.so dynamically links libfftw3 - static linking regressed!"
+            readelf -d priv/libnx_eigen.so | grep NEEDED
+            exit 1
+          fi
+
       - name: Test precompiled artifact
         env:
           MIX_ENV: test
@@ -152,6 +162,16 @@ jobs:
         run: |
           mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
           mix elixir_make.precompile
+
+      - name: Verify FFTW is statically linked
+        run: |
+          # README promises FFTW3 doesn't need to be installed separately on
+          # Linux; a NEEDED entry for it here means static linking regressed.
+          if readelf -d priv/libnx_eigen.so | grep -qi 'NEEDED.*libfftw3'; then
+            echo "ERROR: libnx_eigen.so dynamically links libfftw3 - static linking regressed!"
+            readelf -d priv/libnx_eigen.so | grep NEEDED
+            exit 1
+          fi
 
       - name: Test precompiled artifact
         env:
@@ -239,6 +259,16 @@ jobs:
         run: |
           mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
           mix elixir_make.precompile
+
+      - name: Verify FFTW is statically linked
+        run: |
+          # README promises FFTW3 doesn't need to be installed separately on
+          # Linux; a NEEDED entry for it here means static linking regressed.
+          if readelf -d priv/libnx_eigen.so | grep -qi 'NEEDED.*libfftw3'; then
+            echo "ERROR: libnx_eigen.so dynamically links libfftw3 - static linking regressed!"
+            readelf -d priv/libnx_eigen.so | grep NEEDED
+            exit 1
+          fi
 
       - name: Test precompiled artifact
         env:

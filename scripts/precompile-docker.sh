@@ -134,6 +134,14 @@ run_precompile_for_target() {
             tar -xzf "\$LATEST_TARBALL" -C /tmp/verify
             echo 'Binary dependencies:'
             readelf -d /tmp/verify/libnx_eigen.so 2>/dev/null | grep NEEDED || echo 'Could not read dependencies'
+            # The README promises FFTW3 is statically linked into precompiled
+            # binaries, so a NEEDED entry for it here is a real regression
+            # (see NX_EIGEN_FFT_STATIC in CMakeLists.txt).
+            if readelf -d /tmp/verify/libnx_eigen.so 2>/dev/null | grep -qi 'NEEDED.*libfftw3'; then
+              echo 'ERROR: libnx_eigen.so dynamically links libfftw3 - static linking regressed!'
+              rm -rf /tmp/verify
+              exit 1
+            fi
             rm -rf /tmp/verify
           else
             echo 'No tarball found for verification'

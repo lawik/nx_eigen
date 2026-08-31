@@ -87,6 +87,7 @@ target_precompile_headers(nx_eigen PRIVATE
 # shared library that exports nx_eigen_fft_forward / nx_eigen_fft_inverse.
 set(NX_EIGEN_FFT_LIB "fftw" CACHE STRING "FFT implementation: fftw or none")
 set(NX_EIGEN_FFT_SO  ""     CACHE FILEPATH "Path to custom FFT .so (overrides NX_EIGEN_FFT_LIB)")
+option(NX_EIGEN_FFT_STATIC "Statically link FFTW3 if .a archives are found (required for the README's no-separate-install promise on precompiled binaries)" ON)
 
 target_include_directories(nx_eigen PRIVATE "${CMAKE_SOURCE_DIR}/c_src")
 
@@ -100,19 +101,47 @@ elseif(NX_EIGEN_FFT_LIB STREQUAL "fftw")
   # ── Default FFTW3 implementation ───────────────────────────────────
   target_sources(nx_eigen PRIVATE c_src/nx_eigen_fft_fftw.cpp)
 
+  set(_fftw_linked FALSE)
+
+  # Headers live next to the .so, not the .a, so pkg-config is still needed
+  # for include dirs even when we end up linking the static archives below.
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
     pkg_check_modules(FFTW3 QUIET fftw3)
     pkg_check_modules(FFTW3F QUIET fftw3f)
   endif()
-
-  if(FFTW3_FOUND AND FFTW3F_FOUND)
+  if(FFTW3_FOUND)
     target_include_directories(nx_eigen PRIVATE ${FFTW3_INCLUDE_DIRS})
-    target_link_libraries(nx_eigen PRIVATE ${FFTW3_LIBRARIES} ${FFTW3F_LIBRARIES})
-    message(STATUS "FFT support: FFTW3 dynamic (via pkg-config)")
-  else()
-    target_link_libraries(nx_eigen PRIVATE fftw3 fftw3f)
-    message(STATUS "FFT support: FFTW3 (direct link)")
+  endif()
+
+  if(NX_EIGEN_FFT_STATIC)
+    # Look for the .a archives specifically, so consumers of precompiled
+    # binaries don't need libfftw3.so.3 installed on the target system.
+    set(_orig_lib_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+    find_library(NX_EIGEN_FFTW3_STATIC_LIB fftw3)
+    find_library(NX_EIGEN_FFTW3F_STATIC_LIB fftw3f)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_orig_lib_suffixes}")
+
+    if(NX_EIGEN_FFTW3_STATIC_LIB AND NX_EIGEN_FFTW3F_STATIC_LIB)
+      target_link_libraries(nx_eigen PRIVATE "${NX_EIGEN_FFTW3_STATIC_LIB}" "${NX_EIGEN_FFTW3F_STATIC_LIB}")
+      message(STATUS "FFT support: FFTW3 statically linked (${NX_EIGEN_FFTW3_STATIC_LIB})")
+      set(_fftw_linked TRUE)
+    else()
+      message(WARNING "NX_EIGEN_FFT_STATIC is ON but static FFTW3 archives (.a) were not found; "
+                       "falling back to dynamic linking. Install a dev package that ships static "
+                       "libs (e.g. libfftw3-dev on Debian/Ubuntu) or set -DNX_EIGEN_FFT_STATIC=OFF.")
+    endif()
+  endif()
+
+  if(NOT _fftw_linked)
+    if(FFTW3_FOUND AND FFTW3F_FOUND)
+      target_link_libraries(nx_eigen PRIVATE ${FFTW3_LIBRARIES} ${FFTW3F_LIBRARIES})
+      message(STATUS "FFT support: FFTW3 dynamic (via pkg-config)")
+    else()
+      target_link_libraries(nx_eigen PRIVATE fftw3 fftw3f)
+      message(STATUS "FFT support: FFTW3 (direct link)")
+    endif()
   endif()
 
 elseif(NX_EIGEN_FFT_LIB STREQUAL "none")
