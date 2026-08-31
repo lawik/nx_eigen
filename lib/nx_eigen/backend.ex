@@ -44,13 +44,6 @@ defmodule NxEigen.Backend do
     []
   end
 
-  # Nx >= 0.13 routes phase/cumulative_*/LinAlg decompositions through
-  # Nx.block/4; run the generic pure-Nx implementation on our primitives.
-  @impl true
-  def block(struct, _output, args, fun) do
-    apply(fun, [struct | args])
-  end
-
   @impl true
   def from_binary(tensor, binary, _backend_opts) do
     state = NxEigen.NIF.from_binary(binary, tensor.type, tensor.shape)
