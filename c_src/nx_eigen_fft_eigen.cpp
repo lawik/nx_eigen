@@ -27,7 +27,10 @@ int do_fft(const T *in, T *out, int n, bool forward) {
     return -1;
 
   try {
-    Eigen::FFT<T> fft;
+    // thread-local instance: Eigen::FFT caches kissfft plans per size
+    // internally, so reusing the instance avoids a plan rebuild every
+    // transform (NIF calls stay on scheduler threads)
+    static thread_local Eigen::FFT<T> fft;
     fft.SetFlag(Eigen::FFT<T>::Unscaled);
 
     const std::complex<T> *cin = reinterpret_cast<const std::complex<T> *>(in);
