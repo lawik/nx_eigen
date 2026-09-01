@@ -91,8 +91,12 @@ defmodule NxEigen.NIF do
   def triangular_solve(a, b, lower, left_side, transform_a),
     do: triangular_solve_nif(a, b, lower, left_side, transform_a)
 
+  def eigh(t), do: eigh_nif(t)
+
   defp triangular_solve_nif(_a, _b, _lower, _left_side, _transform_a),
     do: :erlang.nif_error(:nif_not_loaded)
+
+  defp eigh_nif(_t), do: :erlang.nif_error(:not_loaded)
 
   # Binary ops
   @binary_ops [

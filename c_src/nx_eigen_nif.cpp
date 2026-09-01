@@ -5699,3 +5699,86 @@ triangular_solve_nif(ErlNifEnv *env, fine::ResourcePtr<EigenTensor> a,
   }
 }
 FINE_NIF(triangular_solve_nif, 0);
+
+// Symmetric/Hermitian eigendecomposition via Eigen's
+// SelfAdjointEigenSolver. Returns {eigenvalues, eigenvectors} with
+// eigenpairs sorted by |lambda| DESCENDING to match the ordering of
+// Nx's generic (Jacobi) implementation; eigenvectors are the COLUMNS
+// of the second tensor. Supports f32/f64 and c64/c128 (self-adjoint)
+// input, batched over leading axes. For complex input the eigenvalues
+// come back in the complex type (imag 0), matching Nx's
+// to_floating/1 output template.
+std::tuple<fine::ResourcePtr<EigenTensor>, fine::ResourcePtr<EigenTensor>>
+eigh_nif(ErlNifEnv *env, fine::ResourcePtr<EigenTensor> t) {
+  try {
+    size_t rank = t->shape.size();
+    if (rank < 2)
+      throw std::runtime_error("eigh: tensor must be at least rank 2");
+
+    size_t n = t->shape[rank - 1];
+    if ((size_t)t->shape[rank - 2] != n)
+      throw std::runtime_error("eigh: matrix must be square");
+
+    size_t total = 1;
+    for (auto s : t->shape)
+      total *= s;
+    size_t mat_size = n * n;
+    size_t num_batches = mat_size == 0 ? 0 : total / mat_size;
+
+    auto vals = fine::make_resource<EigenTensor>();
+    auto vecs = fine::make_resource<EigenTensor>();
+    vals->shape.assign(t->shape.begin(), t->shape.end() - 1);
+    vecs->shape = t->shape;
+
+    std::visit(
+        [&](auto &arr) {
+          using S = typename std::decay_t<decltype(arr)>::Scalar;
+
+          if constexpr (std::is_same_v<S, float> || std::is_same_v<S, double> ||
+                        std::is_same_v<S, std::complex<float>> ||
+                        std::is_same_v<S, std::complex<double>>) {
+            using Matrix =
+                Eigen::Matrix<S, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+            using Real = typename Eigen::NumTraits<S>::Real;
+
+            auto &vals_arr = vals->data.emplace<FlatArray<S>>();
+            auto &vecs_arr = vecs->data.emplace<FlatArray<S>>();
+            vals_arr.resize(total / (n == 0 ? 1 : n));
+            vecs_arr.resize(total);
+
+            for (size_t b = 0; b < num_batches; ++b) {
+              Eigen::Map<const Matrix> m(arr.data() + b * mat_size, n, n);
+              Eigen::SelfAdjointEigenSolver<Matrix> solver(m);
+              if (solver.info() != Eigen::Success)
+                throw std::runtime_error("eigh: eigensolver failed to converge");
+
+              auto evals = solver.eigenvalues();   // Real, ascending
+              auto evecs = solver.eigenvectors();  // columns
+
+              // order by |lambda| descending (Nx generic contract)
+              std::vector<size_t> order(n);
+              for (size_t i = 0; i < n; ++i)
+                order[i] = i;
+              std::sort(order.begin(), order.end(), [&](size_t a1, size_t a2) {
+                return std::abs(evals[a1]) > std::abs(evals[a2]);
+              });
+
+              for (size_t i = 0; i < n; ++i) {
+                vals_arr[b * n + i] = static_cast<S>(evals[order[i]]);
+                for (size_t r = 0; r < n; ++r)
+                  vecs_arr[b * mat_size + r * n + i] = evecs(r, order[i]);
+              }
+            }
+          } else {
+            throw std::runtime_error(
+                "eigh: unsupported type (float/complex only)");
+          }
+        },
+        t->data);
+
+    return std::make_tuple(vals, vecs);
+  } catch (const std::exception &e) {
+    throw std::runtime_error(std::string("eigh_nif error: ") + e.what());
+  }
+}
+FINE_NIF(eigh_nif, 0);
