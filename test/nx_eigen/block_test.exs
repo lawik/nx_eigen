@@ -1,25 +1,24 @@
 defmodule NxEigen.BlockTest do
   use ExUnit.Case, async: true
 
+  import Nx.Testing, only: [assert_all_close: 3]
+
   # Nx 0.12 routes a family of ops through the block mechanism — the
   # backend callback block/4: cumulative ops, the LinAlg decompositions,
   # take/take_along_axis, top_k, and friends. Each call site hands the
   # backend a default implementation to fall back on; a backend without
   # block/4 raises UndefinedFunctionError on every one of these ops.
 
-  defp eigen(data, opts \\ []) do
+  defp eigen(data, opts) do
     Nx.tensor(data, opts ++ [backend: NxEigen.Backend])
   end
 
-  defp reference(data, opts \\ []) do
+  defp reference(data, opts) do
     Nx.tensor(data, opts ++ [backend: Nx.BinaryBackend])
   end
 
   defp assert_close(result, expected) do
-    result = Nx.backend_copy(result, Nx.BinaryBackend)
-
-    assert Nx.to_number(Nx.all_close(result, expected, atol: 1.0e-9)) == 1,
-           "expected #{inspect(result)} to match #{inspect(expected)}"
+    assert_all_close(result, expected, atol: 1.0e-9)
   end
 
   describe "cumulative blocks" do
